@@ -1,8 +1,8 @@
 /* 
- * sim_hwpe.sv
- * Francesco Conti <fconti@iis.ee.ethz.ch>
+ * sim_ibex.sv
+ * Francesco Conti <f.conti@unibo.it>
  *
- * Copyright (C) 2018-2019 ETH Zurich, University of Bologna
+ * Copyright (C) 2018-2020 ETH Zurich, University of Bologna
  * Copyright and related rights are licensed under the Solderpad Hardware
  * License, Version 0.51 (the "License"); you may not use this file except in
  * compliance with the License.  You may obtain a copy of the License at
@@ -16,14 +16,13 @@
 timeunit 1ps;
 timeprecision 1ps;
 
-module sim_hwpe #(
+module sim_ibex #(
   parameter PROB_STALL = 0.1,
   parameter NC = 8,
   parameter MP = 4,
   parameter ID = 10,
   parameter MEMORY_SIZE = 256*1024,
-  parameter BASE_ADDR = 0,
-  parameter HWPE_ADDR_BASE_BIT = 20
+  parameter BASE_ADDR = 0
 )
 (
   input logic clk_i,
@@ -38,31 +37,11 @@ module sim_hwpe #(
   output logic flag
 );
 
-  hwpe_stream_intf_tcdm instr[0:0]  (.clk(clk_i));
-  hwpe_stream_intf_tcdm stack[0:0]  (.clk(clk_i));
-  hwpe_stream_intf_tcdm tcdm [MP:0] (.clk(clk_i));
+  hwpe_stream_intf_tcdm instr[0:0] (.clk(clk_i));
+  hwpe_stream_intf_tcdm stack[0:0] (.clk(clk_i));
+  hwpe_stream_intf_tcdm tcdm [0:0] (.clk(clk_i));
 
   logic [NC-1:0][1:0] evt;
-
-  logic [MP-1:0]       tcdm_req;
-  logic [MP-1:0]       tcdm_gnt;
-  logic [MP-1:0][31:0] tcdm_add;
-  logic [MP-1:0]       tcdm_wen;
-  logic [MP-1:0][3:0]  tcdm_be;
-  logic [MP-1:0][31:0] tcdm_data;
-  logic [MP-1:0][31:0] tcdm_r_data;
-  logic [MP-1:0]       tcdm_r_valid;
-
-  logic          periph_req;
-  logic          periph_gnt;
-  logic [31:0]   periph_add;
-  logic          periph_wen;
-  logic [3:0]    periph_be;
-  logic [31:0]   periph_data;
-  logic [ID-1:0] periph_id;
-  logic [31:0]   periph_r_data;
-  logic          periph_r_valid;
-  logic [ID-1:0] periph_r_id;
 
   logic          instr_req;
   logic          instr_gnt;
@@ -92,15 +71,6 @@ module sim_hwpe #(
 `endif
 
   // bindings
-  always_comb
-  begin : bind_periph
-    periph_req  = data_req & data_addr[HWPE_ADDR_BASE_BIT];
-    periph_add  = data_addr;
-    periph_wen  = ~data_we;
-    periph_be   = data_be;
-    periph_data = data_wdata;
-    periph_id   = '0;
-  end
 
   always_comb
   begin : bind_instrs
@@ -116,65 +86,24 @@ module sim_hwpe #(
 
   always_comb
   begin : bind_stack
-    stack[0].req  = data_req & (data_addr[31:24] == '0) & ~data_addr[HWPE_ADDR_BASE_BIT];
+    stack[0].req  = data_req & (data_addr[31:24] == '0);
     stack[0].add  = data_addr;
     stack[0].wen  = ~data_we;
     stack[0].be   = data_be;
     stack[0].data = data_wdata;
   end
 
-  generate
-    for(genvar ii=0; ii<4; ii++) begin : tcdm_binding
-      assign tcdm[ii].req  = tcdm_req  [ii];
-      assign tcdm[ii].add  = {8'b0, tcdm_add [ii][23:0]};
-      assign tcdm[ii].wen  = tcdm_wen  [ii];
-      assign tcdm[ii].be   = tcdm_be   [ii];
-      assign tcdm[ii].data = tcdm_data [ii];
-      assign tcdm_gnt     [ii] = tcdm[ii].gnt;
-      assign tcdm_r_data  [ii] = tcdm[ii].r_data;
-      assign tcdm_r_valid [ii] = tcdm[ii].r_valid;
-    end
-    assign tcdm[4].req  = data_req & (data_addr[31:24] != '0) & ~data_addr[HWPE_ADDR_BASE_BIT];
-    assign tcdm[4].add  = {8'b0, data_addr[23:0]};
-    assign tcdm[4].wen  = ~data_we;
-    assign tcdm[4].be   = data_be;
-    assign tcdm[4].data = data_wdata;
-    assign data_gnt    = periph_req ? periph_gnt : stack[0].req ? stack[0].gnt : tcdm[4].gnt;
-    assign data_rdata  = periph_r_valid ? periph_r_data : stack[0].r_valid ? stack[0].r_data : tcdm[4].r_data;
-    assign data_rvalid = periph_r_valid | stack[0].r_valid | tcdm[4].r_valid;
-  endgenerate
-
-  mac_top_wrap #(
-    .N_CORES          ( NC ),
-    .MP               ( MP ),
-    .ID               ( ID )
-  ) i_hwpe_top_wrap (
-    .clk_i          ( clk_i          ),
-    .rst_ni         ( rst_ni         ),
-    .test_mode_i    ( 1'b0           ),
-    .tcdm_add       ( tcdm_add       ),
-    .tcdm_be        ( tcdm_be        ),
-    .tcdm_data      ( tcdm_data      ),
-    .tcdm_gnt       ( tcdm_gnt       ),
-    .tcdm_wen       ( tcdm_wen       ),
-    .tcdm_req       ( tcdm_req       ),
-    .tcdm_r_data    ( tcdm_r_data    ),
-    .tcdm_r_valid   ( tcdm_r_valid   ),
-    .periph_add     ( periph_add     ),
-    .periph_be      ( periph_be      ),
-    .periph_data    ( periph_data    ),
-    .periph_gnt     ( periph_gnt     ),
-    .periph_wen     ( periph_wen     ),
-    .periph_req     ( periph_req     ),
-    .periph_id      ( periph_id      ),
-    .periph_r_data  ( periph_r_data  ),
-    .periph_r_valid ( periph_r_valid ),
-    .periph_r_id    ( periph_r_id    ),
-    .evt_o          ( evt            )
-  );
+  assign tcdm[0].req  = data_req & (data_addr[31:24] != '0);
+  assign tcdm[0].add  = {8'b0, data_addr[23:0]};
+  assign tcdm[0].wen  = ~data_we;
+  assign tcdm[0].be   = data_be;
+  assign tcdm[0].data = data_wdata;
+  assign data_gnt    = stack[0].req ? stack[0].gnt : tcdm[0].gnt;
+  assign data_rdata  = stack[0].r_valid ? stack[0].r_data : tcdm[0].r_data;
+  assign data_rvalid = stack[0].r_valid | tcdm[0].r_valid;
 
   tb_dummy_memory #(
-    .MP          ( MP+1        ),
+    .MP          ( 1           ),
     .MEMORY_SIZE ( MEMORY_SIZE ),
     .BASE_ADDR   ( BASE_ADDR   ),
     .PROB_STALL  ( PROB_STALL  ),
@@ -182,12 +111,12 @@ module sim_hwpe #(
     .TA          ( TA          ),
     .TT          ( TT          )
   ) i_dummy_memory (
-    .clk_i       ( clk_i         ),
+    .clk_i         ( clk_i         ),
     .clk_delayed_i ( clk_delayed_i ),
-    .randomize_i ( randomize_mem ),
-    .enable_i    ( enable_mem    ),
-    .stallable_i ( 1'b1          ),
-    .tcdm        ( tcdm          )
+    .randomize_i   ( randomize_mem ),
+    .enable_i      ( enable_mem    ),
+    .stallable_i   ( 1'b1          ),
+    .tcdm          ( tcdm          )
   );
 
   tb_dummy_memory #(
@@ -228,7 +157,7 @@ module sim_hwpe #(
     .N_EXT_PERF_COUNTERS ( 0 ),
     .RV32E               ( 0 ),
     .RV32M               ( 1 )
-  ) i_zeroriscy (
+  ) i_ibex (
     .clk_i               ( clk_i        ),
     .rst_ni              ( rst_ni       ),
     .clock_en_i          ( 1'b1         ),
@@ -272,14 +201,14 @@ module sim_hwpe #(
 
   initial begin
     // load instruction memory
-    $readmemh(my_getenv("HWPE_TB_STIM_INSTR"), sim_hwpe.i_dummy_instr_memory.memory);
-    $readmemh(my_getenv("HWPE_TB_STIM_DATA"), sim_hwpe.i_dummy_memory.memory);
-    $display("Welcome to the HWPE testbench!");
+    $readmemh(my_getenv("IBEX_TB_STIM_INSTR"), sim_ibex.i_dummy_instr_memory.memory);
+    $readmemh(my_getenv("IBEX_TB_STIM_DATA"), sim_ibex.i_dummy_memory.memory);
+    $display("Welcome to the Ibex testbench!");
   end
 
   int returned = -1;
 
-  assign flag = sim_hwpe.i_zeroriscy.sleeping & (returned!=-1);
+  assign flag = sim_ibex.i_ibex.sleeping & (returned!=-1);
 
   always_ff @(posedge clk_i)
   begin
@@ -301,4 +230,4 @@ module sim_hwpe #(
     end
   end
 
-endmodule // sim_hwpe
+endmodule // sim_ibex

@@ -4,7 +4,7 @@
 #include <verilated.h>
 
 // Include model header
-#include "Vsim_hwpe.h"
+#include "Vsim_ibex.h"
 
 // If "verilator --trace" is used, include the tracing class
 //#if VM_TRACE
@@ -31,7 +31,7 @@ int main(int argc, char **argv, char **env) {
   Verilated::commandArgs(argc, argv);
   Verilated::traceEverOn(true);
   VerilatedVcdC *tfp = new VerilatedVcdC;
-  Vsim_hwpe *top = new Vsim_hwpe;
+  Vsim_ibex *top = new Vsim_ibex;
   top->trace(tfp, 99); // trace 99 levels of hier
 
   top->enable_i      = 0;

@@ -1,14 +1,8 @@
-zero-riscy:
+ibex:
+  group: lowrisc
   commit: tags/pulpissimo-v1.0
-hwpe-ctrl:
-  commit: fb571a7
-  domain: [cluster]
 hwpe-stream:
-  commit: 776cdd3
-  domain: [cluster]
-hwpe-mac-engine:
-  commit: ccb0ee0
-  domain: [cluster]
+  commit: tags/v1.5
 tech_cells_generic:
   commit : 82de105
 scm:
